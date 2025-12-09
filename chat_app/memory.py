@@ -99,11 +99,14 @@ class RedisConversationMemory(BaseConversationMemory):
             return ConversationState(conversation_id=conversation_id)
 
     def save_state(self, state: ConversationState) -> None:
-        data = state.model_dump()
+        # mode="json" гарантирует сериализацию datetime и других типов
+        # в JSON-дружественный формат.
+        data = state.model_dump(mode="json")
         self._client.set(self._state_key(state.conversation_id), json.dumps(data, ensure_ascii=False))
 
     def append_history(self, conversation_id: str, item: HistoryItem) -> None:
-        data = item.model_dump()
+        # mode="json" конвертирует timestamp (datetime) в строку.
+        data = item.model_dump(mode="json")
         self._client.rpush(self._history_key(conversation_id), json.dumps(data, ensure_ascii=False))
 
     def get_history(self, conversation_id: str) -> HistoryResponse:

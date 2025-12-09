@@ -111,10 +111,25 @@ class ChatOrchestrator:
                 request.conversation_id,
                 answer_text[:200],
             )
-        except Exception:
+        except Exception as exc:
+            logger.error(
+                "conversation_id=%s llm_request_failed error=%r",
+                request.conversation_id,
+                exc,
+            )
+            msg = str(exc).lower()
+            if any(k in msg for k in ("401", "unauthorized", "invalid api key", "authentication")):
+                reason = " Причина: проблема с токеном доступа или авторизацией."
+            elif any(k in msg for k in ("429", "rate limit", "too many requests", "quota")):
+                reason = " Причина: временное превышение лимитов запросов к LLM-сервису."
+            elif any(k in msg for k in ("timeout", "timed out", "connection", "connecterror", "network")):
+                reason = " Причина: проблемы с сетевым доступом или таймаут соединения с LLM-сервисом."
+            else:
+                reason = " Причина: внутренняя ошибка на стороне LLM-сервиса."
+
             answer_text = (
-                "Сейчас у меня не получается получить ответ от модели. "
-                "Попробуйте, пожалуйста, повторить запрос позже."
+                "Сейчас у меня не получается получить ответ от модели."
+                f"{reason} Попробуйте, пожалуйста, повторить запрос позже."
             )
 
         # Append assistant reply to history and persist state.

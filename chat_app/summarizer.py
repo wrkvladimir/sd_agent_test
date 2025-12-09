@@ -2,18 +2,18 @@ from __future__ import annotations
 
 from typing import List
 
+from .llm_client import LLMClient
 from .memory import BaseConversationMemory
 from .schemas import HistoryItem, MessageRole
 
 
 class Summarizer:
     """
-    Simple, cheap summarizer for conversation history.
+    Summarizer for conversation history.
 
-    В данном прототипе summary обновляется эвристикой:
+    В данном прототипе summary обновляется с помощью LLM:
     - берём последние несколько сообщений (user/assistant),
-    - формируем короткое текстовое описание.
-    Важно: здесь не используется LLM, чтобы не блокировать ответы.
+    - просим модель сделать краткое повествовательное резюме.
     """
 
     async def update_summary(self, memory: BaseConversationMemory, conversation_id: str) -> None:
@@ -23,19 +23,39 @@ class Summarizer:
         if not items:
             return
 
-        # Берём последние 6 сообщений для краткого описания.
-        tail = items[-6:]
-        parts: List[str] = []
-
+        # Берём последние N сообщений для контекста суммаризации.
+        tail = items[-16:]
+        dialog_lines: List[str] = []
         for item in tail:
-            if item.role == MessageRole.USER:
-                parts.append(f"Пользователь: {item.content}")
-            elif item.role == MessageRole.ASSISTANT:
-                parts.append(f"Агент: {item.content}")
+            role = "user" if item.role == MessageRole.USER else "assistant"
+            dialog_lines.append(f"{role}: {item.content}")
+        dialog_text = "\n".join(dialog_lines)
 
-        summary_text = "Сделай краткое резюме последних сообщений: " + " | ".join(parts)
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "Ты помогаешь составлять краткое резюме диалога поддержки. "
+                    "На основе истории сообщений между пользователем (user) и агентом (assistant) "
+                    "сделай сжатое повествовательное резюме на русском в 1–3 предложениях. "
+                    "Пиши в форме: «Вы спрашивали ..., я объяснил ...». "
+                    "Не используй формат «Пользователь: ...», «Агент: ...» и не перечисляй все сообщения. "
+                    "Не добавляй никаких пояснений про то, что это резюме — просто сам текст резюме."
+                ),
+            },
+            {
+                "role": "user",
+                "content": f"История диалога:\n{dialog_text}",
+            },
+        ]
+
+        llm = LLMClient()
+        try:
+            summary_text = await llm.complete_chat(messages, max_tokens=160, temperature=0.1)
+        except Exception:
+            # В случае ошибки LLM оставляем существующее summary без изменений.
+            return
 
         state = memory.get_state(conversation_id)
-        state.summary = summary_text
+        state.summary = summary_text.strip()
         memory.save_state(state)
-

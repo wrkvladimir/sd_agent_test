@@ -37,7 +37,13 @@ class LLMClient:
         self._client = OpenAI(api_key=api_key, base_url=base_url)
         self._model = model or settings.llm_model
 
-    async def complete_chat(self, messages: List[Dict[str, str]]) -> str:
+    async def complete_chat(
+        self,
+        messages: List[Dict[str, str]],
+        *,
+        max_tokens: int | None = None,
+        temperature: float = 0.1,
+    ) -> str:
         """
         Execute a chat completion request and return assistant text.
 
@@ -45,11 +51,14 @@ class LLMClient:
         """
 
         def _call() -> Any:
-            return self._client.chat.completions.create(
-                model=self._model,
-                messages=messages,
-                temperature=0.2,
-            )
+            kwargs: Dict[str, Any] = {
+                "model": self._model,
+                "messages": messages,
+                "temperature": temperature,
+            }
+            if max_tokens is not None:
+                kwargs["max_tokens"] = max_tokens
+            return self._client.chat.completions.create(**kwargs)
 
         try:
             response = await anyio.to_thread.run_sync(_call)
