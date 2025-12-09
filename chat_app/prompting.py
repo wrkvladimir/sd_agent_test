@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+import logging
+
 from .schemas import Chunk, ConversationState, HistoryItem
+
+
+logger = logging.getLogger("chat_app.prompting")
 
 
 class PromptBuilder:
@@ -58,7 +63,8 @@ class PromptBuilder:
         else:
             context_block = "Релевантных фрагментов базы знаний не найдено."
 
-        # special_instructions: из сценариев / tools.
+        # special_instructions: из сценариев / tools (YAML-объект с полями
+        # instructions, blocks и blocks_with_conditions).
         special_instructions = scenario_context.strip() if scenario_context else ""
 
         # Сборка YAML-подобного промпта как одного system-сообщения.
@@ -68,6 +74,7 @@ class PromptBuilder:
             "system: |\n"
             "  Ты — агент технической поддержки.\n"
             "  Отвечай только на основе поля context и, при наличии, special_instructions.\n"
+            "  Не используй внешний мир или общие знания вне того, что явно дано в этом промпте.\n"
             "  Если context пустой, недостаточный или нерелевантный — честно напиши, что не нашёл точного ответа\n"
             "  и предложи эскалацию специалисту или переформулировку вопроса.\n"
             "  Всегда отвечай на русском языке и в формате диалога, дружелюбно и профессионально.\n"
@@ -82,10 +89,24 @@ class PromptBuilder:
             "  Если dialog_params/message_index равен 1, то это первое сообщение в диалоге\n"
             "   - поздоровайся, если нет - не здоровайся, продолжай диалог словно он длится какое то время.\n"
             "  Не придумывай названия разделов, кнопок, экранов, статусов и других элементов интерфейса и системы,\n"
-            "  , о которой может идти речь. Ты знаешь только то, что попало в данный промпт, остальное не выдумывай.\n"
-            "  если они прямо не указаны в context или special_instructions.\n"
-            "  Из dialog_params используй имя только для обращения к пользователю, не делай на его основе выводов.\n"
+            "  о которой может идти речь. Ты знаешь только то, что попало в данный промпт, остальное не выдумывай,\n"
+            "  если эти элементы прямо не указаны в context или special_instructions.\n"
             "  Старайся укладываться в 3–4 коротких предложения; списки используй только если вопрос явно требует шагов.\n"
+            "  \n"
+            "  special_instructions содержит YAML-объект с полями instructions, blocks и blocks_with_conditions.\n"
+            "  Каждый элемент blocks содержит поле text; эти тексты нужно учитывать как дополнительные инструкции,\n"
+            "  даже если в context нет прямых упоминаний этих формулировок.\n"
+            "  Каждый элемент blocks_with_conditions содержит условие (description, user_message) и два набора текстов:\n"
+            "  when_true.texts и when_false.texts. Используй смысл description и user_message, чтобы решить,\n"
+            "  выполняется ли условие: если да — учитывай тексты из when_true; если нет — тексты из when_false.\n"
+            "  При сравнении description и user_message обращай внимание на ключевые детали (кто, что, когда).\n"
+            "  Если описание похоже, но отличается по важным параметрам (например, говорится о том же событии,\n"
+            "  но в другой день или для другого человека), считай, что условие НЕ выполняется и используй when_false.\n"
+            "  Если user_message вообще не касается темы, описанной в condition.description (по смыслу нет совпадения),\n"
+            "  игнорируй этот условный блок целиком и не используй ни when_true, ни when_false.\n"
+            "  Если по контексту нельзя однозначно решить, игнорируй этот условный блок.\n"
+            "  Не делай логических выводов сверх явно заданных текстов в этих блоках; просто выбирай между when_true и when_false.\n"
+            "  Если внутри какого-либо текста встречается слово \"finderror\", игнорируй соответствующее предложение или текст целиком.\n"
         )
 
         yaml_parts.append(
@@ -119,6 +140,8 @@ class PromptBuilder:
         yaml_parts.append("new_user_message: |\n" + "  " + user_message.replace("\n", "\n  ") + "\n")
 
         yaml_prompt = "\n".join(yaml_parts)
+
+        logger.info("built_yaml_prompt:\n%s", yaml_prompt)
 
         messages: List[Dict[str, str]] = [
             {"role": "system", "content": yaml_prompt},

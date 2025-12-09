@@ -81,6 +81,7 @@ class ConversationState(BaseModel):
     message_index: int = 0
     user_profile: UserProfile = Field(default_factory=UserProfile)
     summary: str = ""
+    scenario_runs: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class ScenarioNode(BaseModel):

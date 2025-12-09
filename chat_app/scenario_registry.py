@@ -31,6 +31,9 @@ class ScenarioRegistry:
     def all(self) -> Dict[str, ScenarioDefinition]:
         return dict(self._scenarios)
 
+    def remove(self, name: str) -> None:
+        self._scenarios.pop(name, None)
+
     def load_default_from_disk(self) -> None:
         """
         Load default scenario definition from JSON file, if present.
@@ -53,4 +56,3 @@ class ScenarioRegistry:
 
 
 registry = ScenarioRegistry()
-

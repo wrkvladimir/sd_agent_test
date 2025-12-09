@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from fastapi import BackgroundTasks, Depends, FastAPI
+import logging
+
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
 
 from .memory import BaseConversationMemory, InMemoryConversationMemory, RedisConversationMemory
 from .orchestrator import ChatOrchestrator
@@ -16,7 +18,14 @@ from .schemas import (
     SummaryResponse,
 )
 from .summarizer import Summarizer
+from .tools.user_data import get_user_data
 
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s:%(name)s:%(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S",
+)
 
 app = FastAPI(title="Chat Agent Service")
 
@@ -28,7 +37,7 @@ except Exception:
     # Фоллбек на in-memory, если Redis недоступен.
     _memory = InMemoryConversationMemory()
 _retriever = KBRetriever()
-_scenario_runner = ScenarioToolRunner()
+_scenario_runner = ScenarioToolRunner(tools={"get_user_data": get_user_data})
 _summarizer = Summarizer()
 _orchestrator = ChatOrchestrator(
     memory=_memory,
@@ -95,10 +104,21 @@ async def get_summary(
 
 @app.post("/scenarios", response_model=ScenarioUpsertResponse)
 async def add_scenario(definition: ScenarioDefinition) -> ScenarioUpsertResponse:
-    """
-    Add or update a scenario definition available to the agent.
-
-    For now all scenarios are stored in-memory via ScenarioRegistry.
-    """
+    """Add or update a scenario definition available to the agent."""
     scenario_registry.add(definition)
     return ScenarioUpsertResponse(name=definition.name)
+
+
+@app.get("/scenarios", response_model=list[ScenarioDefinition])
+async def list_scenarios() -> list[ScenarioDefinition]:
+    """Return all currently registered scenarios."""
+    return list(scenario_registry.all().values())
+
+
+@app.delete("/scenarios/{name}", response_model=ScenarioUpsertResponse)
+async def delete_scenario(name: str) -> ScenarioUpsertResponse:
+    """Delete scenario by name."""
+    if scenario_registry.get(name) is None:
+        raise HTTPException(status_code=404, detail="Scenario not found")
+    scenario_registry.remove(name)
+    return ScenarioUpsertResponse(name=name, status="deleted")
