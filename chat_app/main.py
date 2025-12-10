@@ -29,6 +29,8 @@ logging.basicConfig(
 
 app = FastAPI(title="Chat Agent Service")
 
+logger = logging.getLogger("chat_app.api")
+
 
 # Пытаемся использовать Redis как основное хранилище.
 try:
@@ -99,7 +101,16 @@ async def get_summary(
     conversation_id: str,
     memory: BaseConversationMemory = Depends(get_memory),
 ) -> SummaryResponse:
-    return memory.get_summary(conversation_id)
+    # Для отладки проблем с summary логируем наличие истории и самого summary.
+    history = memory.get_history(conversation_id)
+    summary = memory.get_summary(conversation_id)
+    logger.info(
+        "get_summary conversation_id=%s history_len=%d summary_present=%s",
+        conversation_id,
+        len(history.history),
+        bool(summary.summary),
+    )
+    return summary
 
 
 @app.post("/scenarios", response_model=ScenarioUpsertResponse)

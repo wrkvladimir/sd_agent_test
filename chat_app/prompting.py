@@ -47,8 +47,8 @@ class PromptBuilder:
         # dialog_summary
         dialog_summary = state.summary or ""
 
-        # dialog_tail: берём последние 6 сообщения из истории.
-        tail_items = history_tail[-6:] if history_tail else []
+        # dialog_tail: берём последние 3 сообщения из истории.
+        tail_items = history_tail[-3:] if history_tail else []
         dialog_tail_lines: List[str] = []
         for item in tail_items:
             dialog_tail_lines.append(f"  - role: {item.role.value}\n    content: {item.content!r}")

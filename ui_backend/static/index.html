@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <title>SD Agent Test UI</title>
+    <style>
+      :root {
+        --bg: #f3f4f6;
+        --surface: #ffffff;
+        --border: #d1d5db;
+        --border-soft: #e5e7eb;
+        --text-main: #111827;
+        --text-muted: #6b7280;
+        --primary: #2563eb;
+        --primary-soft: #dbeafe;
+        --error: #b91c1c;
+      }
+      body {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        background: var(--bg);
+        color: var(--text-main);
+      }
+      header {
+        padding: 10px 16px;
+        border-bottom: 1px solid var(--border);
+        font-weight: 600;
+        background: #111827;
+        color: #f9fafb;
+        letter-spacing: 0.02em;
+      }
+      main {
+        display: flex;
+        flex: 1;
+        overflow: hidden;
+        padding: 8px;
+        box-sizing: border-box;
+        gap: 8px;
+      }
+      #controls {
+        width: 280px;
+        padding: 12px;
+        box-sizing: border-box;
+        font-size: 14px;
+        background: var(--surface);
+        border-radius: 8px;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+        display: flex;
+        flex-direction: column;
+      }
+      #controls button {
+        display: block;
+        width: 100%;
+        margin-bottom: 8px;
+        padding: 8px;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        cursor: pointer;
+        font-size: 13px;
+        transition: background 0.12s ease, border-color 0.12s ease, transform 0.06s ease;
+      }
+      #controls button:hover {
+        background: var(--primary-soft);
+        border-color: var(--primary);
+      }
+      #controls button:active {
+        transform: scale(0.98);
+      }
+      #controls input[type="file"] {
+        width: 100%;
+        margin-bottom: 6px;
+        font-size: 12px;
+      }
+      #controls pre {
+        max-height: 240px;
+        overflow: auto;
+        background: #f9fafb;
+        padding: 8px;
+        font-size: 11px;
+        border-radius: 6px;
+        border: 1px solid var(--border-soft);
+      }
+      #chats {
+        flex: 1;
+        display: flex;
+        gap: 8px;
+        box-sizing: border-box;
+      }
+      .chat-panel {
+        flex: 1;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        background: var(--surface);
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+      }
+      .chat-header {
+        padding: 6px 8px;
+        border-bottom: 1px solid var(--border-soft);
+        font-size: 13px;
+        display: flex;
+        gap: 4px;
+        align-items: center;
+      }
+      .chat-header input {
+        flex: 1;
+        padding: 4px;
+        font-size: 12px;
+         border-radius: 4px;
+         border: 1px solid var(--border-soft);
+         background: #f9fafb;
+      }
+      .chat-header select {
+        max-width: 160px;
+        font-size: 12px;
+        padding: 4px;
+        border-radius: 4px;
+        border: 1px solid var(--border-soft);
+        background: #f9fafb;
+        height: 24px;
+      }
+      .chat-header button {
+        padding: 4px 6px;
+        font-size: 12px;
+        border-radius: 4px;
+        border: 1px solid var(--border-soft);
+        background: #f9fafb;
+        cursor: pointer;
+      }
+      .chat-header button:hover {
+        background: #e5e7eb;
+      }
+      .chat-summary {
+        padding: 6px 8px;
+        border-top: 1px solid var(--border-soft);
+        font-size: 12px;
+        background: #f9fafb;
+        min-height: 40px;
+        font-style: italic;
+        color: var(--text-muted);
+      }
+      .chat-history {
+        flex: 1;
+        padding: 8px;
+        overflow-y: auto;
+        font-size: 13px;
+        background: #fff;
+      }
+      .msg {
+        margin-bottom: 4px;
+      }
+      .msg.user {
+        text-align: right;
+      }
+      .msg.assistant {
+        text-align: left;
+      }
+      .msg.assistant.typing {
+        color: #777;
+        font-style: italic;
+      }
+      .msg-role {
+        font-weight: 600;
+        margin-right: 4px;
+      }
+      .chat-input {
+        border-top: 1px solid var(--border-soft);
+        padding: 4px;
+        display: flex;
+        gap: 4px;
+        background: #f9fafb;
+      }
+      .chat-input textarea {
+        flex: 1;
+        resize: none;
+        height: 48px;
+        font-size: 13px;
+        padding: 4px;
+      }
+      .chat-input button {
+        width: 96px;
+        border-radius: 6px;
+        border: 1px solid var(--primary);
+        background: var(--primary);
+        color: #f9fafb;
+        cursor: pointer;
+        font-weight: 500;
+        transition: background 0.12s ease, transform 0.06s ease;
+      }
+      .chat-input button:hover {
+        background: #1d4ed8;
+      }
+      .chat-input button:active {
+        transform: scale(0.98);
+      }
+      .error {
+        color: var(--error);
+        font-size: 12px;
+        margin-top: 4px;
+      }
+      #controls h4 {
+        margin: 0 0 8px;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-main);
+      }
+    </style>
+  </head>
+  <body>
+    <header>SD Agent Test — UI</header>
+    <main>
+      <section id="controls">
+        <h4>Управление знаниями</h4>
+        <input type="file" id="file-ingest" accept=".html,text/html" />
+        <button id="btn-ingest">Загрузить инжест</button>
+        <button id="btn-clear">Очистить данные</button>
+        <button id="btn-data">Получить содержимое базы</button>
+        <div id="controls-error" class="error"></div>
+        <h5>Ответ сервиса данных</h5>
+        <pre id="data-output"></pre>
+      </section>
+      <section id="chats">
+        <div class="chat-panel" data-panel="1">
+          <div class="chat-header">
+            <span>Чат 1:</span>
+            <input type="text" placeholder="conversation_id" />
+            <select class="conv-select">
+              <option value="">Диалоги...</option>
+            </select>
+            <button class="btn-refresh-convs">↻</button>
+            <button class="btn-new-chat">New</button>
+            <button class="btn-load-history">History</button>
+            <button class="btn-summary">Summary</button>
+          </div>
+          <div class="chat-history"></div>
+          <div class="chat-summary"></div>
+          <div class="chat-input">
+            <textarea placeholder="Введите сообщение..."></textarea>
+            <button class="btn-send">Send</button>
+          </div>
+          <div class="error"></div>
+        </div>
+
+        <div class="chat-panel" data-panel="2">
+          <div class="chat-header">
+            <span>Чат 2:</span>
+            <input type="text" placeholder="conversation_id" />
+            <select class="conv-select">
+              <option value="">Диалоги...</option>
+            </select>
+            <button class="btn-refresh-convs">↻</button>
+            <button class="btn-new-chat">New</button>
+            <button class="btn-load-history">History</button>
+            <button class="btn-summary">Summary</button>
+          </div>
+          <div class="chat-history"></div>
+          <div class="chat-summary"></div>
+          <div class="chat-input">
+            <textarea placeholder="Введите сообщение..."></textarea>
+            <button class="btn-send">Send</button>
+          </div>
+          <div class="error"></div>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const API_BASE = "";
+
+      function uuid() {
+        return crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+      }
+
+      async function callApi(path, options = {}) {
+        const resp = await fetch(API_BASE + path, {
+          headers: { "Content-Type": "application/json" },
+          ...options,
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          const msg = data.detail || JSON.stringify(data) || resp.statusText;
+          throw new Error(msg);
+        }
+        return data;
+      }
+
+      // Global controls
+      const btnIngest = document.getElementById("btn-ingest");
+      const fileIngest = document.getElementById("file-ingest");
+
+      btnIngest.onclick = async () => {
+        const err = document.getElementById("controls-error");
+        err.textContent = "";
+        const file = fileIngest.files[0];
+        if (!file) {
+          err.textContent = "Выберите HTML-файл для инжеста";
+          return;
+        }
+        btnIngest.disabled = true;
+        const originalText = btnIngest.textContent;
+        btnIngest.textContent = "Идёт инжест...";
+        try {
+          const text = await file.text();
+          const body = JSON.stringify({
+            source_type: "inline_html",
+            source_id: file.name || "uploaded_html",
+            html: text,
+          });
+          const res = await callApi("/api/ingest", { method: "POST", body });
+          document.getElementById("data-output").textContent = JSON.stringify(res, null, 2);
+        } catch (e) {
+          err.textContent = e.message;
+        } finally {
+          btnIngest.disabled = false;
+          btnIngest.textContent = originalText;
+        }
+      };
+
+      document.getElementById("btn-clear").onclick = async () => {
+        const err = document.getElementById("controls-error");
+        err.textContent = "";
+        try {
+          const res = await callApi("/api/clear", { method: "POST", body: "{}" });
+          document.getElementById("data-output").textContent = JSON.stringify(res, null, 2);
+        } catch (e) {
+          err.textContent = e.message;
+        }
+      };
+
+      document.getElementById("btn-data").onclick = async () => {
+        const err = document.getElementById("controls-error");
+        err.textContent = "";
+        try {
+          const res = await callApi("/api/data");
+          document.getElementById("data-output").textContent = JSON.stringify(res, null, 2);
+        } catch (e) {
+          err.textContent = e.message;
+        }
+      };
+
+      // Chat panels
+      document.querySelectorAll(".chat-panel").forEach((panel) => {
+        const inputId = panel.querySelector(".chat-header input");
+        const convSelect = panel.querySelector(".conv-select");
+        const btnRefreshConvs = panel.querySelector(".btn-refresh-convs");
+        const btnNew = panel.querySelector(".btn-new-chat");
+        const btnHistory = panel.querySelector(".btn-load-history");
+        const btnSummary = panel.querySelector(".btn-summary");
+        const historyDiv = panel.querySelector(".chat-history");
+        const summaryDiv = panel.querySelector(".chat-summary");
+        const textarea = panel.querySelector("textarea");
+        const btnSend = panel.querySelector(".btn-send");
+        const errDiv = panel.querySelector(".error");
+
+        btnRefreshConvs.onclick = async () => {
+          errDiv.textContent = "";
+          try {
+            const res = await callApi("/api/chat/conversations");
+            const list = res.conversations || [];
+            convSelect.innerHTML = '<option value="">Диалоги...</option>';
+            list.forEach((id) => {
+              const opt = document.createElement("option");
+              opt.value = id;
+              opt.textContent = id;
+              convSelect.appendChild(opt);
+            });
+          } catch (e) {
+            errDiv.textContent = e.message;
+          }
+        };
+
+        convSelect.onchange = () => {
+          const v = convSelect.value;
+          if (v) {
+            inputId.value = v;
+          }
+        };
+
+        btnNew.onclick = () => {
+          inputId.value = "conv-" + uuid();
+          historyDiv.innerHTML = "";
+          summaryDiv.textContent = "";
+          errDiv.textContent = "";
+        };
+
+        btnHistory.onclick = async () => {
+          errDiv.textContent = "";
+          const convId = inputId.value.trim();
+          if (!convId) {
+            errDiv.textContent = "Укажите conversation_id";
+            return;
+          }
+          try {
+            const res = await callApi("/api/chat/history?conversation_id=" + encodeURIComponent(convId));
+            historyDiv.innerHTML = "";
+            (res.history || []).forEach((item) => {
+              const div = document.createElement("div");
+              div.className = "msg " + item.role;
+              div.innerHTML =
+                '<span class="msg-role">' +
+                (item.role === "user" ? "Вы" : "Агент") +
+                ":</span> " +
+                (item.content || "");
+              historyDiv.appendChild(div);
+            });
+            historyDiv.scrollTop = historyDiv.scrollHeight;
+          } catch (e) {
+            errDiv.textContent = e.message;
+          }
+        };
+
+        btnSummary.onclick = async () => {
+          errDiv.textContent = "";
+          const convId = inputId.value.trim();
+          if (!convId) {
+            errDiv.textContent = "Укажите conversation_id";
+            return;
+          }
+          try {
+            const res = await callApi("/api/chat/summary?conversation_id=" + encodeURIComponent(convId));
+            summaryDiv.textContent = res.summary || "Summary пока пустой для этого диалога.";
+          } catch (e) {
+            errDiv.textContent = e.message;
+          }
+        };
+
+        async function pollJob(jobId) {
+          while (true) {
+            const res = await callApi("/api/chat/poll?job_id=" + encodeURIComponent(jobId));
+            if (res.status === "pending") {
+              await new Promise((r) => setTimeout(r, 700));
+              continue;
+            }
+            return res;
+          }
+        }
+
+        btnSend.onclick = async () => {
+          errDiv.textContent = "";
+          const convId = inputId.value.trim() || ("conv-" + uuid());
+          inputId.value = convId;
+          const text = textarea.value.trim();
+          if (!text) {
+            return;
+          }
+          textarea.value = "";
+
+          // Добавляем сообщение пользователя сразу.
+          const userDiv = document.createElement("div");
+          userDiv.className = "msg user";
+          userDiv.innerHTML = '<span class="msg-role">Вы:</span> ' + text;
+          historyDiv.appendChild(userDiv);
+          historyDiv.scrollTop = historyDiv.scrollHeight;
+
+          btnSend.disabled = true;
+          const typingDiv = document.createElement("div");
+          typingDiv.className = "msg assistant typing";
+          typingDiv.textContent = "Агент печатает...";
+          historyDiv.appendChild(typingDiv);
+          historyDiv.scrollTop = historyDiv.scrollHeight;
+          try {
+            const startRes = await callApi("/api/chat/send", {
+              method: "POST",
+              body: JSON.stringify({ conversation_id: convId, message: text }),
+            });
+            const job = await pollJob(startRes.job_id);
+            if (job.status === "error") {
+              throw new Error(job.error || "chat error");
+            }
+            const answer = (job.result && job.result.answer) || "";
+            if (typingDiv.parentNode === historyDiv) {
+              historyDiv.removeChild(typingDiv);
+            }
+            const assistantDiv = document.createElement("div");
+            assistantDiv.className = "msg assistant";
+            assistantDiv.innerHTML = '<span class="msg-role">Агент:</span> ' + answer;
+            historyDiv.appendChild(assistantDiv);
+            historyDiv.scrollTop = historyDiv.scrollHeight;
+          } catch (e) {
+            if (typingDiv.parentNode === historyDiv) {
+              historyDiv.removeChild(typingDiv);
+            }
+            errDiv.textContent = e.message;
+          } finally {
+            btnSend.disabled = false;
+          }
+        };
+      });
+    </script>
+  </body>
+  </html>

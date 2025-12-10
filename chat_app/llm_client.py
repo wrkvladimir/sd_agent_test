@@ -37,6 +37,12 @@ class LLMClient:
         self._client = OpenAI(api_key=api_key, base_url=base_url)
         self._model = model or settings.llm_model
 
+        logger.info(
+            "llm_client_init model=%s base_url=%s",
+            self._model,
+            base_url,
+        )
+
     async def complete_chat(
         self,
         messages: List[Dict[str, str]],
@@ -58,6 +64,20 @@ class LLMClient:
             }
             if max_tokens is not None:
                 kwargs["max_tokens"] = max_tokens
+
+            # Логируем полный payload без чувствительных данных (api_key скрыт внутри клиента),
+            # чтобы можно было воспроизвести запрос вручную.
+            try:
+                import json
+
+                logger.info(
+                    "llm_chat_request model=%s payload=%s",
+                    self._model,
+                    json.dumps(kwargs, ensure_ascii=False),
+                )
+            except Exception:  # noqa: BLE001
+                logger.info("llm_chat_request model=%s payload=<unserializable>", self._model)
+
             return self._client.chat.completions.create(**kwargs)
 
         try:
@@ -68,4 +88,13 @@ class LLMClient:
 
         choice = response.choices[0]
         content = getattr(choice.message, "content", None)
+
+        if not content:
+            # Пишем в логи "сырое" представление ответа, чтобы отладить пустой контент.
+            logger.warning(
+                "llm_empty_content model=%s raw_choice=%r",
+                self._model,
+                choice,
+            )
+
         return content or ""

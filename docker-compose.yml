@@ -60,6 +60,22 @@ services:
     ports:
       - "8000:8000"
 
+  ui-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.ui_backend
+    container_name: ui-backend
+    restart: unless-stopped
+    environment:
+      - CHAT_APP_URL=http://chat-app:8000
+      - INGEST_URL=http://ingest-and-retrieval:8000
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - chat-app
+      - ingest-and-retrieval
+    ports:
+      - "8080:8080"
+
 volumes:
   qdrant_data:
   hf_cache:

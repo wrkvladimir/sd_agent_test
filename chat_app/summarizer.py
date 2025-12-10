@@ -2,9 +2,14 @@ from __future__ import annotations
 
 from typing import List
 
+import logging
+
 from .llm_client import LLMClient
 from .memory import BaseConversationMemory
 from .schemas import HistoryItem, MessageRole
+
+
+logger = logging.getLogger("chat_app.summarizer")
 
 
 class Summarizer:
@@ -17,10 +22,26 @@ class Summarizer:
     """
 
     async def update_summary(self, memory: BaseConversationMemory, conversation_id: str) -> None:
+        """
+        Обновляет summary для указанного диалога.
+
+        Логируем ключевые шаги, чтобы отладить ситуации,
+        когда summary почему-то остаётся пустым.
+        """
         history_response = memory.get_history(conversation_id)
         items: List[HistoryItem] = history_response.history
 
+        logger.info(
+            "update_summary_start conversation_id=%s history_len=%d",
+            conversation_id,
+            len(items),
+        )
+
         if not items:
+            logger.info(
+                "update_summary_skip conversation_id=%s reason=no_history",
+                conversation_id,
+            )
             return
 
         # Берём последние N сообщений для контекста суммаризации.
@@ -49,13 +70,35 @@ class Summarizer:
             },
         ]
 
+        logger.info(
+            "update_summary_llm_request conversation_id=%s system=%r user=%r",
+            conversation_id,
+            messages[0]["content"],
+            messages[1]["content"],
+        )
+
         llm = LLMClient()
         try:
-            summary_text = await llm.complete_chat(messages, max_tokens=160, temperature=0.1)
-        except Exception:
+            # Для суммаризации используем те же настройки, что и для основного чата,
+            # без жёсткого ограничения max_tokens, чтобы модель успевала выдать ответ,
+            # а не только reasoning.
+            summary_text = await llm.complete_chat(messages, temperature=0.1)
+        except Exception as exc:  # noqa: BLE001
             # В случае ошибки LLM оставляем существующее summary без изменений.
+            logger.error(
+                "update_summary_failed conversation_id=%s error=%r",
+                conversation_id,
+                exc,
+            )
             return
 
+        summary_text = (summary_text or "").strip()
+        logger.info(
+            "update_summary_llm_response conversation_id=%s full_summary=%r",
+            conversation_id,
+            summary_text,
+        )
+
         state = memory.get_state(conversation_id)
-        state.summary = summary_text.strip()
+        state.summary = summary_text
         memory.save_state(state)
