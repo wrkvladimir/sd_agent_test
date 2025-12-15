@@ -10,8 +10,11 @@ RUN pip install --no-cache-dir \
     uvicorn[standard] \
     pydantic \
     httpx \
+    requests \
     openai \
-    redis
+    redis \
+    langgraph \
+    langchain-openai
 
 COPY chat_app ./chat_app
 COPY data ./data

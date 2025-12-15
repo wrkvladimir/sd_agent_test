@@ -3,7 +3,10 @@ from __future__ import annotations
 import json
 from typing import Dict, List
 
-import redis
+try:
+    import redis  # type: ignore
+except Exception:  # noqa: BLE001
+    redis = None  # type: ignore[assignment]
 
 from .config import settings
 from .schemas import ConversationState, HistoryItem, HistoryResponse, SummaryResponse
@@ -77,6 +80,8 @@ class RedisConversationMemory(BaseConversationMemory):
     """
 
     def __init__(self, url: str | None = None) -> None:
+        if redis is None:
+            raise RuntimeError("redis package is not installed")
         redis_url = url or settings.redis_url
         # decode_responses=True — чтобы получать/записывать строки (а не bytes).
         self._client = redis.Redis.from_url(redis_url, decode_responses=True)

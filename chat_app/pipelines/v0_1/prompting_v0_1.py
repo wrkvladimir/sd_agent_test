@@ -4,19 +4,15 @@ from typing import Any, Dict, List
 
 import logging
 
-from .schemas import Chunk, ConversationState, HistoryItem
+from chat_app.schemas import Chunk, ConversationState, HistoryItem
 
 
-logger = logging.getLogger("chat_app.prompting")
+logger = logging.getLogger("chat_app.prompting_v0_1")
 
 
 class PromptBuilder:
     """
-    Responsible for constructing LLM prompts from:
-    - conversation state and history
-    - scenario-generated context
-    - retrieved KB chunks
-    - current user message
+    Версия 0.1: YAML-подобный промпт.
     """
 
     def build_prompt(
@@ -27,34 +23,18 @@ class PromptBuilder:
         kb_chunks: List[Chunk],
         user_message: str,
     ) -> Dict[str, Any]:
-        """
-        Build a prompt payload suitable for the downstream LLM client.
-
-        YAML-подобный промпт с полями:
-        - system, assistant_meta
-        - dialog_params, dialog_summary, dialog_tail
-        - context (чанки базы знаний)
-        - special_instructions (из tools / сценариев)
-        - new_user_message
-        """
         # dialog_params
         name = state.user_profile.name or ""
         age = state.user_profile.age if state.user_profile.age is not None else ""
-        user_birthday = state.user_profile.birthday_date or ""
-        # Вычисление birthday_today пока не реализовано, используем False.
-        birthday_today = False
 
-        # dialog_summary
         dialog_summary = state.summary or ""
 
-        # dialog_tail: берём последние 3 сообщения из истории.
         tail_items = history_tail[-3:] if history_tail else []
         dialog_tail_lines: List[str] = []
         for item in tail_items:
             dialog_tail_lines.append(f"  - role: {item.role.value}\n    content: {item.content!r}")
         dialog_tail_block = "\n".join(dialog_tail_lines) if dialog_tail_lines else "  # нет предыдущих сообщений"
 
-        # context: чанки базы знаний.
         if kb_chunks:
             kb_lines: List[str] = ["База знаний (релевантные фрагменты):"]
             for idx, chunk in enumerate(kb_chunks, start=1):
@@ -63,11 +43,8 @@ class PromptBuilder:
         else:
             context_block = "Релевантных фрагментов базы знаний не найдено."
 
-        # special_instructions: из сценариев / tools (YAML-объект с полями
-        # instructions, blocks и blocks_with_conditions).
         special_instructions = scenario_context.strip() if scenario_context else ""
 
-        # Сборка YAML-подобного промпта как одного system-сообщения.
         yaml_parts: List[str] = []
 
         yaml_parts.append(
@@ -113,8 +90,6 @@ class PromptBuilder:
             f"  message_index: {state.message_index}\n"
             f"  name: {name!r}\n"
             f"  age: {age!r}\n"
-            f"  user_birthday: {user_birthday!r}\n"
-            f"  birthday_today: {str(birthday_today).lower()}\n"
         )
 
         yaml_parts.append("dialog_summary: |\n" + f"  {dialog_summary}\n")
@@ -132,7 +107,7 @@ class PromptBuilder:
 
         yaml_prompt = "\n".join(yaml_parts)
 
-        logger.info("built_yaml_prompt:\n%s", yaml_prompt)
+        logger.info("built_yaml_prompt_v0_1:\n%s", yaml_prompt)
 
         messages: List[Dict[str, str]] = [
             {"role": "system", "content": yaml_prompt},

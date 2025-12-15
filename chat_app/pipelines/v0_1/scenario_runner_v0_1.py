@@ -6,20 +6,11 @@ from typing import Any, Dict, List, Optional
 
 import re
 
-from .schemas import Chunk, ConversationState, ScenarioDefinition, ScenarioNode
+from chat_app.schemas import Chunk, ConversationState, ScenarioDefinition, ScenarioNode
 
 
 @dataclass
 class ScenarioRunResult:
-    """
-    Result of executing a scenario for a single user message.
-
-    context_text: accumulated text instructions that must be added
-                  to the LLM prompt.
-    last_step_id: identifier of the last executed node (for debugging).
-    state:        updated ConversationState.
-    """
-
     context_text: str
     last_step_id: Optional[str]
     state: ConversationState
@@ -27,14 +18,10 @@ class ScenarioRunResult:
 
 class ScenarioToolRunner:
     """
-    Engine responsible for executing JSON-defined scenarios.
-
-    The concrete logic (text nodes, tool calls, condition handling and
-    template substitutions) will be implemented here.
+    Версия 0.1: существующий раннер сценариев с YAML-подобным special_instructions.
     """
 
     def __init__(self, tools: Optional[Dict[str, Any]] = None) -> None:
-        # tools: mapping from tool name to callable
         self._tools: Dict[str, Any] = tools or {}
 
     def _render_template(
@@ -43,25 +30,10 @@ class ScenarioToolRunner:
         state: ConversationState,
         tools_results: Dict[str, Dict[str, Any]],
     ) -> str:
-        """
-        Подстановка плейсхолдеров формата {=...=} в текст.
-
-        Поддерживаем:
-        - {=@tool_name.field=} -> tools_results[tool_name][field]
-        - {=dialog.name=}      -> state.user_profile.name
-        - {=dialog.age=}       -> state.user_profile.age
-        - {=dialog.message_index=} -> state.message_index
-
-        Если значение не найдено или произошла ошибка, подставляем литерал
-        'finderror', чтобы LLM мог проигнорировать соответствующее предложение.
-        """
-
         pattern = re.compile(r"\{=([^=]+)=\}")
 
         def replace(match: re.Match[str]) -> str:
             expr = match.group(1).strip()
-
-            # Ссылка на результат инструмента: {=@tool.field=}
             if expr.startswith("@"):
                 inner = expr[1:]
                 parts = inner.split(".")
@@ -76,7 +48,6 @@ class ScenarioToolRunner:
                     value = tool_data.get(field)
                 return str(value) if value is not None else "finderror"
 
-            # Ссылка на параметры диалога: {=dialog.*=}
             if expr.startswith("dialog."):
                 key = expr[len("dialog.") :]
                 try:
@@ -92,13 +63,12 @@ class ScenarioToolRunner:
                 except Exception:  # noqa: BLE001
                     return "finderror"
 
-            # Неизвестный формат плейсхолдера.
             return "finderror"
 
         return pattern.sub(replace, text)
 
     def _sort_key(self, node: ScenarioNode) -> List[int]:
-        parts = []
+        parts: List[int] = []
         for part in node.id.split("."):
             try:
                 parts.append(int(part))
@@ -116,26 +86,11 @@ class ScenarioToolRunner:
         user_message: str,
         kb_chunks: List[Chunk],
     ) -> ScenarioRunResult:
-        """
-        Execute a single scenario for the given user message.
-
-        Простейший precondition: сценарий применяется только к первому
-        сообщению диалога (message_index == 1).\n
-        Логика разбора нод:
-        - text: добавляется в special_instructions как текстовый блок;
-        - tool: подготавливает данные в tools_results (например, get_user_data);
-        - if: превращается в условный блок, выбор ветки оставляем на усмотрение LLM;
-        - end: завершает обработку сценария.
-        """
-        _ = kb_chunks  # пока не используется, но может быть полезен в будущих сценариях
+        _ = kb_chunks
 
         if state.message_index != 1:
             return ScenarioRunResult(context_text="", last_step_id=None, state=state)
 
-        # Дополнительный простой precondition для сценариев "про день рождения".
-        # Идея: если сценарий завязан на дне рождения, но в первом сообщении
-        # пользователь вообще его не упоминает, то лучше не добавлять
-        # special_instructions из этого сценария в промпт.
         scenario_name = (scenario.name or "").lower()
         if "дню рожд" in scenario_name or "день рожд" in scenario_name:
             text = user_message.lower()
@@ -173,29 +128,28 @@ class ScenarioToolRunner:
         def ensure_tool_data(tool_name: str) -> None:
             if tool_name in tools_results:
                 return
+
             if tool_name == "get_user_data":
-                # Используем уже заполненный профиль пользователя.
+                # В версии 0.1 сценарии используют уже заполненный профиль пользователя.
                 tools_results[tool_name] = {
                     "name": state.user_profile.name,
                     "age": state.user_profile.age,
-                    "birthday_date": state.user_profile.birthday_date,
                 }
+                return
+
+            func = self._tools.get(tool_name)
+            if not func:
+                tools_results[tool_name] = {}
+                return
+            try:
+                result = func()
+            except Exception:  # noqa: BLE001
+                tools_results[tool_name] = {}
+                return
+            if isinstance(result, dict):
+                tools_results[tool_name] = result
             else:
-                # Для прочих тулов попытаемся вызвать зарегистрированный callable.
-                func = self._tools.get(tool_name)
-                if not func:
-                    tools_results[tool_name] = {}
-                    return
-                try:
-                    result = func()
-                except Exception:  # noqa: BLE001
-                    tools_results[tool_name] = {}
-                    return
-                if isinstance(result, dict):
-                    tools_results[tool_name] = result
-                else:
-                    # Попробуем взять __dict__ или обернуть в словарь.
-                    tools_results[tool_name] = getattr(result, "__dict__", {"value": result})
+                tools_results[tool_name] = getattr(result, "__dict__", {"value": result})
 
         def add_text_block(text: str) -> None:
             rendered = self._render_template(text, state, tools_results)
@@ -203,7 +157,6 @@ class ScenarioToolRunner:
 
         def add_conditional_block(node: ScenarioNode) -> None:
             condition = node.condition or ""
-            # Собираем тексты для веток.
             true_texts: List[str] = []
             false_texts: List[str] = []
 
@@ -225,7 +178,6 @@ class ScenarioToolRunner:
                 }
             )
 
-        # Обходим ноды сценария.
         for node in nodes:
             if node.type == "end":
                 break
@@ -242,7 +194,6 @@ class ScenarioToolRunner:
         if not text_blocks and not conditional_blocks:
             return ScenarioRunResult(context_text="", last_step_id=None, state=state)
 
-        # Собираем YAML-подобный объект instructions + blocks + blocks_with_conditions.
         instructions = (
             "special_instructions описывает дополнительные сценарные указания.\n"
             "- blocks: список обязательных текстов-инструкций, которые нужно учитывать при формировании ответа.\n"
@@ -277,13 +228,8 @@ class ScenarioToolRunner:
             lines.append("blocks_with_conditions:")
             for cond in conditional_blocks:
                 lines.append("  - condition:")
-                lines.append(
-                    f'      description: "{cond["condition"]["description"]}"'
-                )
-                lines.append(
-                    f'      user_message: "{cond["condition"]["user_message"]}"'
-                )
-                # when_true
+                lines.append(f'      description: "{cond["condition"]["description"]}"')
+                lines.append(f'      user_message: "{cond["condition"]["user_message"]}"')
                 lines.append("    when_true:")
                 lines.append("      texts:")
                 if cond["when_true"]["texts"]:
@@ -291,7 +237,6 @@ class ScenarioToolRunner:
                         lines.append(f'        - "{txt}"')
                 else:
                     lines.append("        # нет текстов для ветки when_true")
-                # when_false
                 lines.append("    when_false:")
                 lines.append("      texts:")
                 if cond["when_false"]["texts"]:
@@ -302,7 +247,6 @@ class ScenarioToolRunner:
 
         context_text = "\n".join(lines)
 
-        # Логируем факт выполнения сценария в состоянии диалога.
         try:
             state.scenario_runs.append(
                 {
@@ -313,7 +257,6 @@ class ScenarioToolRunner:
                 }
             )
         except Exception:  # noqa: BLE001
-            # Ошибка логирования сценария не должна ломать основной поток.
             pass
 
         return ScenarioRunResult(context_text=context_text, last_step_id=None, state=state)

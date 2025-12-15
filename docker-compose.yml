@@ -25,6 +25,7 @@ services:
     restart: unless-stopped
     environment:
       - QDRANT_URL=${QDRANT_URL}
+      - REDIS_URL=${REDIS_URL}
       - HF_HOME=${HF_HOME}
       - EMBEDDING_MODEL_NAME=${EMBEDDING_MODEL_NAME}
       - RERANKER_MODEL_NAME=${RERANKER_MODEL_NAME}
@@ -51,14 +52,26 @@ services:
     environment:
       - RETRIEVAL_URL=${RETRIEVAL_URL}
       - REDIS_URL=${REDIS_URL}
+      - SCENARIO_STORAGE_PATH=${SCENARIO_STORAGE_PATH}
+      - AGENT_PIPELINE_VERSION=${AGENT_PIPELINE_VERSION}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_BASE_URL=${OPENAI_BASE_URL}
       - LLM_MODEL=${LLM_MODEL}
+      - CONDITION_MODEL=${CONDITION_MODEL}
+      - JUDGE_MODEL=${JUDGE_MODEL}
+      - REVISE_MODEL=${REVISE_MODEL}
+      - SUMMARY_MODEL=${SUMMARY_MODEL}
+      - SGR_MODEL=${SGR_MODEL}
+      - SGR_LOG_PROMPTS=${SGR_LOG_PROMPTS}
+      - SGR_TIMEOUT_S=${SGR_TIMEOUT_S}
+      - SGR_TRACE_DIR=/sgr_traces
     depends_on:
       - ingest-and-retrieval
       - redis
     ports:
       - "8000:8000"
+    volumes:
+      - ./sgr_traces:/sgr_traces
 
   ui-backend:
     build:
@@ -70,6 +83,14 @@ services:
       - CHAT_APP_URL=http://chat-app:8000
       - INGEST_URL=http://ingest-and-retrieval:8000
       - REDIS_URL=redis://redis:6379/0
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - RERANKER_ENABLED=${RERANKER_ENABLED}
+      - SEARCH_TOP_K=${SEARCH_TOP_K}
+      - SEARCH_LIMIT=${SEARCH_LIMIT}
+      - SEARCH_SCORE_THRESHOLD=${SEARCH_SCORE_THRESHOLD}
+      - CHUNK_MAX_LENGTH=${CHUNK_MAX_LENGTH}
+      - CHUNK_OVERLAP=${CHUNK_OVERLAP}
+      - AGENT_PIPELINE_VERSION=${AGENT_PIPELINE_VERSION}
     depends_on:
       - chat-app
       - ingest-and-retrieval

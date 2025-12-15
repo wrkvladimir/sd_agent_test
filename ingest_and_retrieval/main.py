@@ -33,6 +33,7 @@ from .schemas import (
     SearchResponse,
 )
 from .reranker import get_reranker_model, rerank
+from .runtime_config import get_override_bool, get_override_float, get_override_int
 
 
 logging.basicConfig(
@@ -116,10 +117,14 @@ async def ingest(request: IngestRequest) -> IngestResponse:
             warnings=[f"Ошибка чтения источника: {exc}"],
         )
 
+    chunk_max_length = get_override_int("CHUNK_MAX_LENGTH")
+    chunk_overlap = get_override_int("CHUNK_OVERLAP")
     parsed = parse_html_to_chunks(
         html=html,
         source_document_id=request.source_id,
         request_id=request_id,
+        chunk_max_length=chunk_max_length,
+        chunk_overlap=chunk_overlap,
     )
     chunks: List[ParagraphChunk] = parsed["chunks"]
     warnings = parsed["warnings"]
@@ -240,10 +245,15 @@ async def search(request: SearchRequest) -> SearchResponse:
 
     default_collection = os.getenv("SEARCH_COLLECTION", "support_knowledge")
     collection = default_collection
-    top_k = int(os.getenv("SEARCH_TOP_K", "5"))
-    search_limit = int(os.getenv("SEARCH_LIMIT", str(top_k * 3)))
-    score_threshold = float(os.getenv("SEARCH_SCORE_THRESHOLD", "0.0"))
-    reranker_enabled = os.getenv("RERANKER_ENABLED", "true").lower() in {"1", "true", "yes", "on"}
+    top_k = get_override_int("SEARCH_TOP_K") or int(os.getenv("SEARCH_TOP_K", "5"))
+    search_limit = get_override_int("SEARCH_LIMIT") or int(os.getenv("SEARCH_LIMIT", str(top_k * 3)))
+    score_threshold = get_override_float("SEARCH_SCORE_THRESHOLD") or float(os.getenv("SEARCH_SCORE_THRESHOLD", "0.0"))
+    reranker_override = get_override_bool("RERANKER_ENABLED")
+    reranker_enabled = (
+        reranker_override
+        if reranker_override is not None
+        else os.getenv("RERANKER_ENABLED", "true").lower() in {"1", "true", "yes", "on"}
+    )
 
     logger.info(
         "request_id=%s search started collection=%s top_k=%d limit=%d threshold=%s reranker_enabled=%s",

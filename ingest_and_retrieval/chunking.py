@@ -35,14 +35,28 @@ def _get_chunk_params() -> tuple[int, int]:
     return max_length, overlap
 
 
-def split_text_to_chunks(text: str, request_id: str) -> List[str]:
+def split_text_to_chunks(
+    text: str,
+    request_id: str,
+    *,
+    max_length: int | None = None,
+    overlap: int | None = None,
+) -> List[str]:
     """
     Делит текст на чанки фиксированной длины с перекрытием.
 
     Мы работаем по символам, а не по токенам, чтобы
     не завязываться жёстко на конкретный токенайзер.
     """
-    max_length, overlap = _get_chunk_params()
+    if max_length is None or overlap is None:
+        max_length, overlap = _get_chunk_params()
+    else:
+        if max_length <= 0:
+            max_length = 512
+        if overlap < 0:
+            overlap = 0
+        if overlap >= max_length:
+            overlap = max_length // 4
 
     if len(text) <= max_length:
         return [text]
@@ -69,4 +83,3 @@ def split_text_to_chunks(text: str, request_id: str) -> List[str]:
     )
 
     return chunks
-

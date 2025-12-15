@@ -46,6 +46,9 @@ def parse_html_to_chunks(
     html: str,
     source_document_id: str,
     request_id: str,
+    *,
+    chunk_max_length: int | None = None,
+    chunk_overlap: int | None = None,
 ) -> Dict[str, Any]:
     warnings: List[str] = []
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -97,7 +100,12 @@ def parse_html_to_chunks(
             paragraphs_total += 1
 
             # Делим абзац на чанки по длине с перекрытием.
-            paragraph_chunks = split_text_to_chunks(raw_text, request_id)
+            paragraph_chunks = split_text_to_chunks(
+                raw_text,
+                request_id,
+                max_length=chunk_max_length,
+                overlap=chunk_overlap,
+            )
             for text_paragraph in paragraph_chunks:
                 if title:
                     text_for_embedding = f"{title}. {text_paragraph}"

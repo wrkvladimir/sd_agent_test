@@ -126,6 +126,9 @@
         background: #f9fafb;
         height: 24px;
       }
+      .chat-header select.pipeline-select {
+        max-width: 92px;
+      }
       .chat-header button {
         padding: 4px 6px;
         font-size: 12px;
@@ -231,6 +234,10 @@
           <div class="chat-header">
             <span>Чат 1:</span>
             <input type="text" placeholder="conversation_id" />
+            <select class="pipeline-select" title="Версия пайплайна">
+              <option value="1.0">v1.0</option>
+              <option value="0.1">v0.1</option>
+            </select>
             <select class="conv-select">
               <option value="">Диалоги...</option>
             </select>
@@ -252,6 +259,10 @@
           <div class="chat-header">
             <span>Чат 2:</span>
             <input type="text" placeholder="conversation_id" />
+            <select class="pipeline-select" title="Версия пайплайна">
+              <option value="1.0">v1.0</option>
+              <option value="0.1">v0.1</option>
+            </select>
             <select class="conv-select">
               <option value="">Диалоги...</option>
             </select>
@@ -289,6 +300,26 @@
           throw new Error(msg);
         }
         return data;
+      }
+
+      let defaultPipelineVersion = null;
+      try {
+        defaultPipelineVersion = localStorage.getItem("pipelineDefault");
+      } catch (_) {}
+
+      async function loadDefaultPipelineVersion() {
+        try {
+          const cfg = await callApi("/api/config");
+          const v = cfg.default_pipeline_version;
+          if (v === "0.1" || v === "1.0") {
+            defaultPipelineVersion = v;
+            try {
+              localStorage.setItem("pipelineDefault", v);
+            } catch (_) {}
+          }
+        } catch (_) {
+          // ignore, keep local/default
+        }
       }
 
       // Global controls
@@ -348,6 +379,7 @@
       // Chat panels
       document.querySelectorAll(".chat-panel").forEach((panel) => {
         const inputId = panel.querySelector(".chat-header input");
+        const pipelineSelect = panel.querySelector(".pipeline-select");
         const convSelect = panel.querySelector(".conv-select");
         const btnRefreshConvs = panel.querySelector(".btn-refresh-convs");
         const btnNew = panel.querySelector(".btn-new-chat");
@@ -388,6 +420,56 @@
           historyDiv.innerHTML = "";
           summaryDiv.textContent = "";
           errDiv.textContent = "";
+          if (defaultPipelineVersion === "0.1" || defaultPipelineVersion === "1.0") {
+            pipelineSelect.value = defaultPipelineVersion;
+          }
+        };
+
+        // Persist pipeline version per conversation_id (so switching works within one dialog).
+        function pipelineKey(convId) {
+          return "pipelineVersion:" + convId;
+        }
+
+        function setPipelineForConversation(convId, version) {
+          try {
+            localStorage.setItem(pipelineKey(convId), version);
+          } catch (_) {}
+        }
+
+        function getPipelineForConversation(convId) {
+          try {
+            return localStorage.getItem(pipelineKey(convId));
+          } catch (_) {
+            return null;
+          }
+        }
+
+        function syncPipelineSelectFromConversation() {
+          const convId = inputId.value.trim();
+          if (!convId) return;
+          const stored = getPipelineForConversation(convId);
+          if (stored === "0.1" || stored === "1.0") {
+            pipelineSelect.value = stored;
+          } else if (defaultPipelineVersion === "0.1" || defaultPipelineVersion === "1.0") {
+            pipelineSelect.value = defaultPipelineVersion;
+          }
+        }
+
+        inputId.onchange = syncPipelineSelectFromConversation;
+        inputId.onblur = syncPipelineSelectFromConversation;
+        convSelect.onchange = () => {
+          const v = convSelect.value;
+          if (v) {
+            inputId.value = v;
+            syncPipelineSelectFromConversation();
+          }
+        };
+
+        pipelineSelect.onchange = () => {
+          const convId = inputId.value.trim();
+          if (convId) {
+            setPipelineForConversation(convId, pipelineSelect.value);
+          }
         };
 
         btnHistory.onclick = async () => {
@@ -446,6 +528,8 @@
           errDiv.textContent = "";
           const convId = inputId.value.trim() || ("conv-" + uuid());
           inputId.value = convId;
+          // Store selection for this conversation_id (can be changed mid-dialog).
+          setPipelineForConversation(convId, pipelineSelect.value);
           const text = textarea.value.trim();
           if (!text) {
             return;
@@ -468,7 +552,7 @@
           try {
             const startRes = await callApi("/api/chat/send", {
               method: "POST",
-              body: JSON.stringify({ conversation_id: convId, message: text }),
+              body: JSON.stringify({ conversation_id: convId, message: text, pipeline_version: pipelineSelect.value }),
             });
             const job = await pollJob(startRes.job_id);
             if (job.status === "error") {
@@ -493,6 +577,20 @@
           }
         };
       });
+
+      // Init: fetch default pipeline version from chat-app and apply to selects.
+      (async () => {
+        await loadDefaultPipelineVersion();
+        document.querySelectorAll(".chat-panel").forEach((panel) => {
+          const pipelineSelect = panel.querySelector(".pipeline-select");
+          const inputId = panel.querySelector(".chat-header input");
+          const convId = inputId.value.trim();
+          if (convId) return;
+          if (defaultPipelineVersion === "0.1" || defaultPipelineVersion === "1.0") {
+            pipelineSelect.value = defaultPipelineVersion;
+          }
+        });
+      })();
     </script>
   </body>
   </html>

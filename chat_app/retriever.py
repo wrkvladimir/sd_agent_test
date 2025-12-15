@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import asyncio
+import logging
 from typing import List
 
 import httpx
 
 from .config import settings
 from .schemas import Chunk
+
+
+logger = logging.getLogger("chat_app.retriever")
 
 
 class KBRetriever:
@@ -27,10 +32,33 @@ class KBRetriever:
         """
         payload = {"query": query, "with_debug": False}
 
-        async with httpx.AsyncClient(base_url=self._base_url) as client:
-            response = await client.post("/search", json=payload)
-            response.raise_for_status()
-            data = response.json()
+        data = {}
+        last_error: Exception | None = None
+        # Ingest service does model warmup at startup; allow a longer retry window.
+        max_attempts = 8
+        for attempt in range(1, max_attempts + 1):
+            try:
+                async with httpx.AsyncClient(base_url=self._base_url, timeout=30.0) as client:
+                    response = await client.post("/search", json=payload)
+                    response.raise_for_status()
+                    data = response.json()
+                last_error = None
+                break
+            except Exception as exc:  # noqa: BLE001
+                last_error = exc
+                logger.warning(
+                    "kb_search_failed attempt=%d base_url=%s error=%r",
+                    attempt,
+                    self._base_url,
+                    exc,
+                )
+                # Exponential backoff with cap.
+                delay = min(8.0, 0.5 * (2 ** (attempt - 1)))
+                await asyncio.sleep(delay)
+
+        if last_error is not None:
+            # Production fallback: treat as empty context to avoid failing /chat.
+            return []
 
         chunks_raw = data.get("chunks", []) or []
         chunks: List[Chunk] = []

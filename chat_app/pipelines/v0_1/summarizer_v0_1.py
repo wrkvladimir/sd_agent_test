@@ -4,47 +4,37 @@ from typing import List
 
 import logging
 
-from .llm_client import LLMClient
-from .memory import BaseConversationMemory
-from .schemas import HistoryItem, MessageRole
+from chat_app.memory import BaseConversationMemory
+from chat_app.schemas import HistoryItem, MessageRole
+
+from .llm_client_v0_1 import LLMClient
 
 
-logger = logging.getLogger("chat_app.summarizer")
+logger = logging.getLogger("chat_app.summarizer_v0_1")
 
 
 class Summarizer:
     """
-    Summarizer for conversation history.
-
-    В данном прототипе summary обновляется с помощью LLM:
-    - берём последние несколько сообщений (user/assistant),
-    - просим модель сделать краткое повествовательное резюме.
+    Версия 0.1: суммаризатор истории диалога через тот же LLM.
     """
 
     async def update_summary(self, memory: BaseConversationMemory, conversation_id: str) -> None:
-        """
-        Обновляет summary для указанного диалога.
-
-        Логируем ключевые шаги, чтобы отладить ситуации,
-        когда summary почему-то остаётся пустым.
-        """
         history_response = memory.get_history(conversation_id)
         items: List[HistoryItem] = history_response.history
 
         logger.info(
-            "update_summary_start conversation_id=%s history_len=%d",
+            "update_summary_start_v0_1 conversation_id=%s history_len=%d",
             conversation_id,
             len(items),
         )
 
         if not items:
             logger.info(
-                "update_summary_skip conversation_id=%s reason=no_history",
+                "update_summary_skip_v0_1 conversation_id=%s reason=no_history",
                 conversation_id,
             )
             return
 
-        # Берём последние N сообщений для контекста суммаризации.
         tail = items[-16:]
         dialog_lines: List[str] = []
         for item in tail:
@@ -71,7 +61,7 @@ class Summarizer:
         ]
 
         logger.info(
-            "update_summary_llm_request conversation_id=%s system=%r user=%r",
+            "update_summary_llm_request_v0_1 conversation_id=%s system=%r user=%r",
             conversation_id,
             messages[0]["content"],
             messages[1]["content"],
@@ -79,14 +69,10 @@ class Summarizer:
 
         llm = LLMClient()
         try:
-            # Для суммаризации используем те же настройки, что и для основного чата,
-            # без жёсткого ограничения max_tokens, чтобы модель успевала выдать ответ,
-            # а не только reasoning.
             summary_text = await llm.complete_chat(messages, temperature=0.1)
         except Exception as exc:  # noqa: BLE001
-            # В случае ошибки LLM оставляем существующее summary без изменений.
             logger.error(
-                "update_summary_failed conversation_id=%s error=%r",
+                "update_summary_failed_v0_1 conversation_id=%s error=%r",
                 conversation_id,
                 exc,
             )
@@ -94,7 +80,7 @@ class Summarizer:
 
         summary_text = (summary_text or "").strip()
         logger.info(
-            "update_summary_llm_response conversation_id=%s full_summary=%r",
+            "update_summary_llm_response_v0_1 conversation_id=%s full_summary=%r",
             conversation_id,
             summary_text,
         )
@@ -102,3 +88,4 @@ class Summarizer:
         state = memory.get_state(conversation_id)
         state.summary = summary_text
         memory.save_state(state)
+

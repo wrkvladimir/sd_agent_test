@@ -49,6 +49,10 @@ class ScenarioRegistry:
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
             scenario = ScenarioDefinition.model_validate(data)
+            # Внедрение политики v1.0 (программно): дефолтный тестовый сценарий должен применяться
+            # только к первому сообщению пользователя в рамках одного диалога.
+            # Это НЕ захардкоженное ключевое слово/фильтр: это явная политика на уровне сценария.
+            scenario.meta.setdefault("apply_only_message_index", 1)
             self.add(scenario)
             logger.info("loaded default scenario %s from %s", scenario.name, path)
         except Exception as exc:  # noqa: BLE001

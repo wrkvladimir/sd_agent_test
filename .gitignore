@@ -1,3 +1,15 @@
 /.cursor
 /.env
 /.vscode
+/ui_frontend_v2/node_modules
+/ui_frontend_v2/dist
+/sgr_traces
+/data/SGR-like_nlp_scenario_pipeline.md
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Node / Vite
+node_modules/
+dist/

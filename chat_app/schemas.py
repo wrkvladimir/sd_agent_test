@@ -70,7 +70,6 @@ class UserProfile(BaseModel):
 
     name: Optional[str] = None
     age: Optional[int] = None
-    birthday_date: Optional[str] = None
     extra: Dict[str, Any] = Field(default_factory=dict)
 
 
@@ -114,6 +113,17 @@ class ScenarioDefinition(BaseModel):
 
     name: str
     code: List[ScenarioNode]
+    # Optional scenario metadata/policy. Used by v1.0 scenario engine.
+    meta: Dict[str, Any] = Field(default_factory=dict)
+    # Scenario can be toggled without deletion.
+    enabled: bool = True
+    # Optional UI metadata (tooltip/preview).
+    summary: Optional[str] = None
+    admin_message: Optional[str] = None
+
+
+class ScenarioPatchRequest(BaseModel):
+    enabled: Optional[bool] = None
 
 
 class ScenarioUpsertResponse(BaseModel):
@@ -121,3 +131,12 @@ class ScenarioUpsertResponse(BaseModel):
 
     name: str
     status: str = "ok"
+
+
+class ToolSpec(BaseModel):
+    """Tool metadata for UI and future orchestration."""
+
+    name: str
+    description: str = ""
+    input_schema: Dict[str, Any] = Field(default_factory=dict)
+    output_schema: Dict[str, Any] = Field(default_factory=dict)

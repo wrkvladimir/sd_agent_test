@@ -1,3 +1,14 @@
+FROM node:20-alpine AS ui-build
+
+WORKDIR /frontend
+
+COPY ui_frontend_v2/package.json ui_frontend_v2/package-lock.json ./
+RUN npm ci
+
+COPY ui_frontend_v2 ./
+RUN npm run build
+
+
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -5,6 +16,7 @@ WORKDIR /app
 RUN pip install --no-cache-dir fastapi uvicorn[standard] httpx redis
 
 COPY ui_backend ./ui_backend
+COPY --from=ui-build /frontend/dist ./ui_backend/static
 
 EXPOSE 8080
 

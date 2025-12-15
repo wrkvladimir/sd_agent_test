@@ -5,14 +5,19 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir \
-    fastapi \
-    uvicorn[standard] \
-    pydantic \
-    qdrant-client \
-    beautifulsoup4 \
-    lxml \
-    sentence-transformers
+# Пинним pip <25, чтобы избежать проблем с проверкой хэшей на тяжёлых пакетах
+# (torch и CUDA-зависимости), которые появились в последних базовых образах.
+RUN pip install --no-cache-dir "pip<25.0" && \
+    pip install --no-cache-dir \
+        fastapi \
+        uvicorn[standard] \
+        pydantic \
+        qdrant-client \
+        beautifulsoup4 \
+        lxml \
+        sentence-transformers
+
+RUN pip install --no-cache-dir redis
 
 COPY ingest_and_retrieval ./ingest_and_retrieval
 COPY data ./data
