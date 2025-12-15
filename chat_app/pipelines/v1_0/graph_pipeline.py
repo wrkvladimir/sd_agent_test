@@ -21,7 +21,9 @@ from chat_app.tools.registry import build_tool_function_map
 
 import anyio
 from openai import OpenAI
+from openai import APIStatusError, RateLimitError
 from chat_app.runtime_config import get_effective_openai_api_key
+from chat_app.runtime_config import get_effective_openai_api_keys, mark_openai_api_key_rate_limited
 
 
 logger = logging.getLogger("chat_app.graph_pipeline_v1_0")
@@ -39,25 +41,48 @@ class _OpenRouterClient:
         model: str | None = None,
         response_format: Dict[str, Any] | None = None,
     ) -> str:
-        def _call() -> Any:
-            api_key = get_effective_openai_api_key()
-            if not api_key:
-                raise RuntimeError("LLM API key (OPENAI_API_KEY) is not set")
-            client = OpenAI(api_key=api_key, base_url=settings.llm_base_url)
-            payload: Dict[str, Any] = {
-                "model": model or self._model,
-                "messages": messages,
-                "temperature": temperature,
-            }
-            if response_format is not None:
-                payload["response_format"] = response_format
-            try:
-                logger.info("llm_request_v1_0 payload=%s", json.dumps(payload, ensure_ascii=False))
-            except Exception:  # noqa: BLE001
-                logger.info("llm_request_v1_0 payload=<unserializable>")
-            return client.chat.completions.create(**payload)
+        keys = get_effective_openai_api_keys()
+        if not keys:
+            raise RuntimeError("LLM API key (OPENAI_API_KEY) is not set")
 
-        response = await anyio.to_thread.run_sync(_call)
+        payload: Dict[str, Any] = {
+            "model": model or self._model,
+            "messages": messages,
+            "temperature": temperature,
+        }
+        if response_format is not None:
+            payload["response_format"] = response_format
+        try:
+            logger.info("llm_request_v1_0 payload=%s", json.dumps(payload, ensure_ascii=False))
+        except Exception:  # noqa: BLE001
+            logger.info("llm_request_v1_0 payload=<unserializable>")
+
+        last_exc: Exception | None = None
+        for _attempt in range(max(1, len(keys))):
+            def _call() -> Any:
+                api_key = get_effective_openai_api_key()
+                if not api_key:
+                    raise RuntimeError("LLM API key (OPENAI_API_KEY) is not set")
+                client = OpenAI(api_key=api_key, base_url=settings.llm_base_url)
+                return client.chat.completions.create(**payload)
+
+            try:
+                response = await anyio.to_thread.run_sync(_call)
+                break
+            except RateLimitError as exc:
+                last_exc = exc
+                mark_openai_api_key_rate_limited()
+                continue
+            except APIStatusError as exc:
+                last_exc = exc
+                if getattr(exc, "status_code", None) == 429:
+                    mark_openai_api_key_rate_limited()
+                    continue
+                raise
+        else:
+            assert last_exc is not None
+            raise last_exc
+
         choice = response.choices[0]
         content = getattr(choice.message, "content", "") or ""
         logger.info(

@@ -241,7 +241,7 @@ export function ScenarioCard({ className }: { className?: string }) {
                 </DialogDescription>
               </DialogHeader>
 
-              <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                 <div className="min-w-0 space-y-3">
                   <div className="text-sm font-semibold">From description</div>
                   <Input

@@ -13,11 +13,13 @@ from typing import Any, Dict, List, Optional, Tuple, Type, TypeVar, cast
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
+from openai import APIStatusError, RateLimitError
 from pydantic import BaseModel
 
 from chat_app.config import settings
 from chat_app.schemas import ScenarioDefinition, ToolSpec
 from chat_app.runtime_config import get_effective_openai_api_key
+from chat_app.runtime_config import get_effective_openai_api_keys, mark_openai_api_key_rate_limited
 
 from .models import (
     Step1ExtractIntents,
@@ -139,21 +141,54 @@ async def _call_llm_step(
     last_raw = ""
     headers: Dict[str, Any] = {}
     resp_payload: Dict[str, Any] = {}
-    try:
-        msg = await asyncio.wait_for(llm.ainvoke(messages), timeout=timeout_s)
-        last_raw = str(getattr(msg, "content", "") or "")
-        meta = getattr(msg, "response_metadata", None) or {}
-        headers = dict(meta.get("headers") or {}) if isinstance(meta, dict) else {}
-        parsed_obj = _extract_json_object(last_raw)
-        parsed = out_model.model_validate(parsed_obj)
-        resp_payload = {
-            "raw": last_raw,
-            "parsed_json": parsed_obj,
-            "validated_output": cast(dict, parsed.model_dump()),
-            "response_metadata": meta,
-        }
-        resp_path.write_text(json.dumps(resp_payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    except Exception as exc:  # noqa: BLE001
+
+    keys = get_effective_openai_api_keys()
+    if not keys:
+        raise RuntimeError("OPENAI_API_KEY is not set")
+
+    last_exc: Exception | None = None
+    for attempt in range(max(1, len(keys))):
+        llm_attempt = llm if attempt == 0 else _build_llm()
+        try:
+            msg = await asyncio.wait_for(llm_attempt.ainvoke(messages), timeout=timeout_s)
+            last_raw = str(getattr(msg, "content", "") or "")
+            meta = getattr(msg, "response_metadata", None) or {}
+            headers = dict(meta.get("headers") or {}) if isinstance(meta, dict) else {}
+            parsed_obj = _extract_json_object(last_raw)
+            parsed = out_model.model_validate(parsed_obj)
+            resp_payload = {
+                "raw": last_raw,
+                "parsed_json": parsed_obj,
+                "validated_output": cast(dict, parsed.model_dump()),
+                "response_metadata": meta,
+            }
+            resp_path.write_text(json.dumps(resp_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            break
+        except RateLimitError as exc:
+            last_exc = exc
+            mark_openai_api_key_rate_limited()
+            continue
+        except APIStatusError as exc:
+            last_exc = exc
+            if getattr(exc, "status_code", None) == 429:
+                mark_openai_api_key_rate_limited()
+                continue
+            raise
+        except Exception as exc:  # noqa: BLE001
+            last_exc = exc
+            duration_s = time.monotonic() - started
+            if settings.sgr_log_prompts:
+                logger.info(
+                    "sgr_step_error trace=%s step=%s duration_s=%.3f error=%r response_path=%s",
+                    trace_id,
+                    step,
+                    duration_s,
+                    exc,
+                    str(resp_path),
+                )
+            raise
+    else:
+        assert last_exc is not None
         duration_s = time.monotonic() - started
         if settings.sgr_log_prompts:
             logger.info(
@@ -161,10 +196,10 @@ async def _call_llm_step(
                 trace_id,
                 step,
                 duration_s,
-                exc,
+                last_exc,
                 str(resp_path),
             )
-        raise
+        raise last_exc
 
     duration_s = time.monotonic() - started
     if settings.sgr_log_prompts:

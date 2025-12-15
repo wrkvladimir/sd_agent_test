@@ -3,7 +3,6 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { ScrollArea } from "@/components/ui/scroll-area";
 
 const Dialog = DialogPrimitive.Root;
 const DialogTrigger = DialogPrimitive.Trigger;
@@ -34,14 +33,17 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed left-[50%] top-[50%] z-50 flex w-[calc(100vw-2rem)] max-w-5xl translate-x-[-50%] translate-y-[-50%] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-md outline-none",
+        "fixed left-[50%] top-[50%] z-50 flex max-h-[90vh] w-[calc(100vw-2rem)] max-w-4xl translate-x-[-50%] translate-y-[-50%] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-md outline-none",
         className,
       )}
       {...props}
     >
-      <ScrollArea className="max-h-[90vh] w-full">
-        <div className="grid gap-4 p-6">{children}</div>
-      </ScrollArea>
+      <div
+        className="flex-1 overflow-y-auto overflow-x-hidden p-6"
+        style={{ scrollbarGutter: "stable" }}
+      >
+        <div className="grid gap-4">{children}</div>
+      </div>
       <DialogPrimitive.Close className="absolute right-4 top-4 rounded-xl p-2 opacity-70 transition-opacity hover:bg-accent hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
         <X className="h-4 w-4" />
         <span className="sr-only">Close</span>
