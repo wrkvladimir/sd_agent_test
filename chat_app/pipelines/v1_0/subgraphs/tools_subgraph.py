@@ -100,6 +100,8 @@ def build_tools_subgraph(
             "Ты — модуль принятия решения по условному ветвлению сценария поддержки.\n"
             "Нужно определить, относится ли последнее сообщение пользователя к условию, и если относится — истинно оно, ложно или неоднозначно.\n"
             "Важно: ты решаешь применимость сценарной ветки по последнему сообщению пользователя и dialog_params, а не «истинность во внешнем мире».\n"
+            "dialog_params.message_index — это порядковый номер текущего сообщения пользователя (считаются только сообщения пользователя, а не ответы ассистента). "
+            "Не пересчитывай этот номер по истории диалога, используй только значение из dialog_params.\n"
             "Верни СТРОГО JSON без лишнего текста формата:\n"
             '{\n'
             '  "decision": "ignore|true|false|unknown",\n'
@@ -110,9 +112,9 @@ def build_tools_subgraph(
             "- true: только если из сообщения ЯВНО следует, что условие выполняется.\n"
             "- false: только если из сообщения ЯВНО следует, что условие НЕ выполняется, но тема та же.\n"
             "- unknown: если тема та же, но нельзя уверенно выбрать true/false.\n"
-            "- Если условие про параметры диалога (например, dialog.message_index или «первое сообщение») —\n"
-            "  используй dialog.message_index для принятия решения и НЕ выбирай ignore по причине «не по теме».\n"
-            "- Если условие про «второе/третье/четвертое сообщение» — это строгое сравнение dialog.message_index с 2/3/4.\n"
+            "- Если условие про параметры диалога (например, dialog_params.message_index или «первое сообщение пользователя») —\n"
+            "  используй dialog_params.message_index для принятия решения и НЕ выбирай ignore по причине «не по теме».\n"
+            "- Если условие про «второе/третье/четвертое сообщение пользователя» — это строгое сравнение dialog_params.message_index с 2/3/4.\n"
             "- Если условие сформулировано как «Пользователь написал/сказал/сообщил ... что ...» — трактуй это как проверку факта высказывания в последнем сообщении.\n"
             "  TRUE: если пользователь в последнем сообщении утверждает это.\n"
             "  FALSE: если пользователь в последнем сообщении явно утверждает обратное.\n"
@@ -286,9 +288,25 @@ def build_tools_subgraph(
 
         enabled_for_summarize: set[str] = set()
         enabled_overall: set[str] = set()
+
+        has_true_blocks: Dict[str, bool] = {name: False for name in scenario_names}
+        has_false_blocks: Dict[str, bool] = {name: False for name in scenario_names}
+
+        for b in blocks:
+            src = (b.get("source") or "").strip()
+            if src in has_true_blocks and b.get("target") == "agent" and b.get("kind") == "raw":
+                bid = str(b.get("id") or "")
+                if ":applied:true:" in bid:
+                    has_true_blocks[src] = True
+                if ":applied:false:" in bid:
+                    has_false_blocks[src] = True
+
         for name in scenario_names:
             dec = _decisions_for(name)
-            if "true" in dec or "false" in dec:
+            if has_true_blocks.get(name):
+                enabled_for_summarize.add(name)
+                enabled_overall.add(name)
+            elif has_false_blocks.get(name):
                 enabled_for_summarize.add(name)
                 enabled_overall.add(name)
             elif "unknown" in dec:

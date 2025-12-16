@@ -11,7 +11,7 @@ import httpx
 import redis
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -421,6 +421,48 @@ async def api_graph(format: str = "mermaid", xray: int = 1) -> Response:
 
     media_type = resp.headers.get("content-type") or "text/plain; charset=utf-8"
     return Response(content=resp.content, status_code=resp.status_code, media_type=media_type)
+
+
+@app.get("/api/graph/mermaid-live")
+async def api_graph_mermaid_live(xray: int = 1) -> Response:
+    """
+    Open graph visualization directly in mermaid.live instead of rendering PNG via mermaid.ink.
+    """
+    defaults = _parse_env_defaults()
+    overrides = _get_runtime_overrides()
+    effective = dict(defaults)
+    for k, v in overrides.items():
+        if k in effective:
+            effective[k] = v
+
+    version = str(effective.get("AGENT_PIPELINE_VERSION") or "").strip()
+    if version != "1.0":
+        version = "1.0"
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        try:
+            resp = await client.get(
+                f"{CHAT_APP_URL}/graph",
+                params={"format": "mermaid", "xray": xray},
+                headers={"X-Agent-Pipeline-Version": version},
+            )
+        except httpx.HTTPError as exc:
+            logger.error("graph mermaid request failed: %r", exc)
+            raise HTTPException(status_code=502, detail="Failed to call graph") from exc
+
+    mermaid_text = resp.text
+    try:
+        import base64
+        import zlib
+
+        compressed = zlib.compress(mermaid_text.encode("utf-8"))
+        encoded = base64.urlsafe_b64encode(compressed).decode("ascii")
+        url = f"https://mermaid.live/edit#pako:{encoded}"
+    except Exception as exc:  # noqa: BLE001
+        logger.error("failed to build mermaid.live url: %r", exc)
+        raise HTTPException(status_code=500, detail="Failed to build mermaid.live URL") from exc
+
+    return RedirectResponse(url=url)
 
 
 @app.get("/api/runtime-config")

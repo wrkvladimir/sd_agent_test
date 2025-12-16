@@ -136,7 +136,7 @@ export function SystemConfigCard({ className }: { className?: string }) {
                     window.setTimeout(() => setGraphToast(""), 1800);
                     return;
                   }
-                  window.open("http://localhost:8080/api/graph?format=png&xray=1", "_blank", "noopener,noreferrer");
+                  window.open("http://localhost:8080/api/graph/mermaid-live?xray=1", "_blank", "noopener,noreferrer");
                 }}
                 className="inline-flex items-center gap-2 rounded-xl border border-border bg-background px-2.5 py-2 text-xs hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
